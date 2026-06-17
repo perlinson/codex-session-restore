@@ -24,12 +24,14 @@ func TestUpdateSessionIndexCreatesEntry(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session_index.jsonl")
 	workspace := &Workspace{SessionIndexPath: path}
-	now := time.Date(2026, 6, 17, 8, 30, 0, 0, time.UTC)
+	originalUpdatedAt := time.Date(2026, 5, 7, 7, 31, 10, 123000000, time.UTC)
 
 	changed, err := workspace.updateSessionIndex([]Thread{{
-		ID:    "thread-1",
-		Title: "Recovered Session",
-	}}, now, false)
+		ID:          "thread-1",
+		Title:       "Recovered Session",
+		UpdatedAt:   originalUpdatedAt.Unix(),
+		UpdatedAtMS: originalUpdatedAt.UnixMilli(),
+	}}, false)
 	if err != nil {
 		t.Fatalf("updateSessionIndex() error = %v", err)
 	}
@@ -47,6 +49,9 @@ func TestUpdateSessionIndexCreatesEntry(t *testing.T) {
 	}
 	if !strings.Contains(text, `"thread_name":"Recovered Session"`) {
 		t.Fatalf("session index missing thread title: %s", text)
+	}
+	if !strings.Contains(text, `"updated_at":"2026-05-07T07:31:10.123Z"`) {
+		t.Fatalf("session index did not preserve original updated_at: %s", text)
 	}
 }
 
@@ -77,6 +82,10 @@ func TestPatchRolloutMetadataUpdatesAllProviderFields(t *testing.T) {
 	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
+	originalModTime := time.Date(2026, 4, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(path, originalModTime, originalModTime); err != nil {
+		t.Fatalf("Chtimes() error = %v", err)
+	}
 
 	changed, err := patchRolloutMetadata(path, "thread-1", "current", "/old", false)
 	if err != nil {
@@ -96,5 +105,12 @@ func TestPatchRolloutMetadataUpdatesAllProviderFields(t *testing.T) {
 	}
 	if got := strings.Count(text, `"model_provider":"current"`); got != 3 {
 		t.Fatalf("current provider count = %d, want 3 in %s", got, text)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat() error = %v", err)
+	}
+	if !info.ModTime().Equal(originalModTime) {
+		t.Fatalf("rollout mod time = %s, want %s", info.ModTime(), originalModTime)
 	}
 }

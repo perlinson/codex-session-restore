@@ -367,10 +367,6 @@ func (w *Workspace) RepairThreads(opts RepairOptions) (*RepairReport, error) {
 		}
 	}
 
-	now := time.Now().UTC()
-	nowUnix := now.Unix()
-	nowUnixMS := now.UnixMilli()
-
 	updatedThreads := make([]Thread, 0, len(targets))
 	tx, err := db.Begin()
 	if err != nil {
@@ -406,11 +402,9 @@ func (w *Workspace) RepairThreads(opts RepairOptions) (*RepairReport, error) {
 					model_provider = ?,
 					cwd = ?,
 					has_user_event = 0,
-					archived = 0,
-					updated_at = ?,
-					updated_at_ms = ?
+					archived = 0
 				where id = ?
-			`, targetProvider, targetCWD, nowUnix, nowUnixMS, thread.ID); err != nil {
+			`, targetProvider, targetCWD, thread.ID); err != nil {
 				return nil, fmt.Errorf("update thread %s: %w", thread.ID, err)
 			}
 		}
@@ -419,8 +413,6 @@ func (w *Workspace) RepairThreads(opts RepairOptions) (*RepairReport, error) {
 		thread.CWD = targetCWD
 		thread.Archived = 0
 		thread.HasUserEvent = 0
-		thread.UpdatedAt = nowUnix
-		thread.UpdatedAtMS = nowUnixMS
 		thread.RolloutPath = rolloutPath
 		updatedThreads = append(updatedThreads, thread)
 
@@ -447,7 +439,7 @@ func (w *Workspace) RepairThreads(opts RepairOptions) (*RepairReport, error) {
 		}
 	}
 
-	updated, err := w.updateSessionIndex(updatedThreads, now, opts.DryRun)
+	updated, err := w.updateSessionIndex(updatedThreads, opts.DryRun)
 	if err != nil {
 		return nil, err
 	}
@@ -615,6 +607,9 @@ func patchRolloutMetadata(path, threadID, provider, cwd string, dryRun bool) (bo
 	if err := os.Chmod(tempPath, info.Mode()); err != nil {
 		return false, err
 	}
+	if err := os.Chtimes(tempPath, info.ModTime(), info.ModTime()); err != nil {
+		return false, err
+	}
 	if err := os.Rename(tempPath, path); err != nil {
 		return false, err
 	}
@@ -712,7 +707,7 @@ type sessionIndexEntry struct {
 	UpdatedAt  string `json:"updated_at"`
 }
 
-func (w *Workspace) updateSessionIndex(threads []Thread, now time.Time, dryRun bool) (bool, error) {
+func (w *Workspace) updateSessionIndex(threads []Thread, dryRun bool) (bool, error) {
 	entries, err := readSessionIndexEntries(w.SessionIndexPath)
 	if err != nil {
 		return false, err
@@ -728,7 +723,7 @@ func (w *Workspace) updateSessionIndex(threads []Thread, now time.Time, dryRun b
 		entry := sessionIndexEntry{
 			ID:         thread.ID,
 			ThreadName: firstNonEmpty(thread.Title, thread.ID),
-			UpdatedAt:  now.Format(time.RFC3339Nano),
+			UpdatedAt:  threadUpdatedAtISO(thread),
 		}
 		if idx, ok := indexByID[thread.ID]; ok {
 			if entries[idx] != entry {
@@ -854,6 +849,16 @@ func trimLine(text string, max int) string {
 		return text
 	}
 	return text[:max-3] + "..."
+}
+
+func threadUpdatedAtISO(thread Thread) string {
+	if thread.UpdatedAtMS > 0 {
+		return time.UnixMilli(thread.UpdatedAtMS).UTC().Format(time.RFC3339Nano)
+	}
+	if thread.UpdatedAt > 0 {
+		return time.Unix(thread.UpdatedAt, 0).UTC().Format(time.RFC3339Nano)
+	}
+	return time.Now().UTC().Format(time.RFC3339Nano)
 }
 
 func normalizeRolloutPath(path string) string {
