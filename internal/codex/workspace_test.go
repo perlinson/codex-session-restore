@@ -70,6 +70,21 @@ name = "Custom"
 	}
 }
 
+func TestParseModelProviderFallsBackToSingleProfile(t *testing.T) {
+	t.Parallel()
+
+	config := `
+service_tier = "priority"
+
+[profiles.m21]
+model = "codex-MiniMax-M2.7"
+model_provider = "minimax"
+`
+	if got := parseModelProvider(config); got != "minimax" {
+		t.Fatalf("parseModelProvider() = %q, want minimax", got)
+	}
+}
+
 func TestPatchRolloutMetadataUpdatesAllProviderFields(t *testing.T) {
 	t.Parallel()
 

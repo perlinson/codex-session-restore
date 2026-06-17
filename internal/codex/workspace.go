@@ -874,6 +874,7 @@ func normalizeRolloutPath(path string) string {
 
 func parseModelProvider(config string) string {
 	section := ""
+	var profileProviders []string
 	for _, line := range strings.Split(config, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -883,18 +884,26 @@ func parseModelProvider(config string) string {
 			section = line
 			continue
 		}
-		if section != "" {
-			continue
-		}
 		key, value, ok := strings.Cut(line, "=")
 		if !ok || strings.TrimSpace(key) != "model_provider" {
 			continue
 		}
 		value = stripInlineComment(strings.TrimSpace(value))
+		provider := ""
 		if unquoted, err := strconv.Unquote(value); err == nil {
-			return strings.TrimSpace(unquoted)
+			provider = strings.TrimSpace(unquoted)
+		} else {
+			provider = strings.Trim(value, `"' `)
 		}
-		return strings.Trim(value, `"' `)
+		if section == "" {
+			return provider
+		}
+		if strings.HasPrefix(section, "[profiles.") && provider != "" && !slices.Contains(profileProviders, provider) {
+			profileProviders = append(profileProviders, provider)
+		}
+	}
+	if len(profileProviders) == 1 {
+		return profileProviders[0]
 	}
 	return ""
 }
