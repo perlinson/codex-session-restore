@@ -1,0 +1,6 @@
+dist/
+/codex-session-restore
+scripts/
+skill/
+.DS_Store
+*.log
