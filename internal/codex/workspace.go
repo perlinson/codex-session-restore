@@ -50,11 +50,16 @@ func OpenWorkspace(codexDir string, dryRun bool) (*Workspace, error) {
 	}
 
 	var dbPath string
+	var dbInfo os.FileInfo
 	for _, candidate := range sqliteCandidates {
 		path := filepath.Join(cleanDir, candidate)
-		if _, err := os.Stat(path); err == nil {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if dbPath == "" || info.ModTime().After(dbInfo.ModTime()) {
 			dbPath = path
-			break
+			dbInfo = info
 		}
 	}
 	if dbPath == "" {
@@ -384,7 +389,24 @@ func (w *Workspace) RepairThreads(opts RepairOptions) (*RepairReport, error) {
 		targetCWD := firstNonEmpty(opts.CWD, thread.CWD)
 		rolloutPath := normalizeRolloutPath(thread.RolloutPath)
 		if rolloutPath == "" {
-			return nil, fmt.Errorf("thread %s has empty rollout_path", thread.ID)
+			report.SkippedThreads = append(report.SkippedThreads, SkippedThread{
+				ID:     thread.ID,
+				Title:  thread.Title,
+				Reason: "empty rollout_path",
+			})
+			continue
+		}
+		if _, err := os.Stat(rolloutPath); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				report.SkippedThreads = append(report.SkippedThreads, SkippedThread{
+					ID:          thread.ID,
+					Title:       thread.Title,
+					RolloutPath: rolloutPath,
+					Reason:      "rollout file missing",
+				})
+				continue
+			}
+			return nil, fmt.Errorf("stat rollout %s: %w", rolloutPath, err)
 		}
 
 		if err := w.backupOnce(rolloutPath, stamp, backupSet, report); err != nil {
@@ -708,6 +730,9 @@ type sessionIndexEntry struct {
 }
 
 func (w *Workspace) updateSessionIndex(threads []Thread, dryRun bool) (bool, error) {
+	if strings.TrimSpace(w.SessionIndexPath) == "" {
+		return false, nil
+	}
 	entries, err := readSessionIndexEntries(w.SessionIndexPath)
 	if err != nil {
 		return false, err

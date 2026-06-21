@@ -44,6 +44,13 @@ type RepairedThread struct {
 	SessionIndexChange bool
 }
 
+type SkippedThread struct {
+	ID          string
+	Title       string
+	RolloutPath string
+	Reason      string
+}
+
 type RepairReport struct {
 	DryRun              bool
 	DatabasePath        string
@@ -51,5 +58,6 @@ type RepairReport struct {
 	SessionIndexPath    string
 	BackupPaths         []string
 	Threads             []RepairedThread
+	SkippedThreads      []SkippedThread
 	SessionIndexUpdated bool
 }

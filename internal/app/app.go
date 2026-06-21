@@ -80,13 +80,15 @@ func runInspect(args []string, stdout io.Writer) error {
 	}
 
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tPROVIDER\tARCHIVED\tUPDATED\tTITLE\tCWD")
+	fmt.Fprintln(tw, "ID\tPROVIDER\tSOURCE\tCLI_VERSION\tARCHIVED\tUPDATED\tTITLE\tCWD")
 	for _, thread := range threads {
 		fmt.Fprintf(
 			tw,
-			"%s\t%s\t%d\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			thread.ID,
 			thread.ModelProvider,
+			thread.Source,
+			thread.CLIVersion,
 			thread.Archived,
 			formatUnix(thread.UpdatedAt),
 			thread.Title,
@@ -219,6 +221,19 @@ func printRepairReport(stdout io.Writer, report *codex.RepairReport) {
 			repaired.RolloutChanged,
 			repaired.Title,
 		)
+	}
+	if len(report.SkippedThreads) > 0 {
+		fmt.Fprintln(stdout, "Skipped threads:")
+		for _, skipped := range report.SkippedThreads {
+			fmt.Fprintf(
+				stdout,
+				"  %s | rollout=%s | reason=%s | title=%s\n",
+				skipped.ID,
+				skipped.RolloutPath,
+				skipped.Reason,
+				skipped.Title,
+			)
+		}
 	}
 	fmt.Fprintf(stdout, "Session index updated: %t\n", report.SessionIndexUpdated)
 }
